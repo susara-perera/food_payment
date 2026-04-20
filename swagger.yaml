@@ -25,14 +25,14 @@ info:
     name: Student 4 - Susara
 
 servers:
-  - url: https://food-order-payment-service-production.up.railway.app
-    description: Production (Railway)
+  - url: https://food-payment.onrender.com
+    description: Production (Render)
   - url: http://localhost:8084
     description: Local development server
 
 externalDocs:
-  description: Order Service API
-  url: https://order-service-production-5615.up.railway.app
+  description: Payment Service API Docs (Render)
+  url: https://food-payment.onrender.com/api-docs
 
 paths:
   /health:
