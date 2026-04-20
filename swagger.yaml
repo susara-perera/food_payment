@@ -17,6 +17,7 @@ info:
     |---------|----------|-------|
     | Order Service | https://order-service-hokk.onrender.com | Fetch order total & validate order status |
     | User Identity Service | https://user-identity-service.onrender.com | Validate user & snapshot profile |
+    | Catalog Service | https://menu-service-44hs.onrender.com | Fetch menu and item details for catalog lookups |
 
     Key endpoints consumed:
     - `GET /orders/{id}` — fetch order details (amount, status, items)
