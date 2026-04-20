@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>13/13</span>
+                <span class='fraction'>15/15</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>13/13</span>
+                <span class='fraction'>15/15</span>
             </div>
         
             
@@ -102,22 +102,19 @@
 <a name='L37'></a><a href='#L37'>37</a>
 <a name='L38'></a><a href='#L38'>38</a>
 <a name='L39'></a><a href='#L39'>39</a>
-<a name='L40'></a><a href='#L40'>40</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L40'></a><a href='#L40'>40</a>
+<a name='L41'></a><a href='#L41'>41</a>
+<a name='L42'></a><a href='#L42'>42</a>
+<a name='L43'></a><a href='#L43'>43</a>
+<a name='L44'></a><a href='#L44'>44</a>
+<a name='L45'></a><a href='#L45'>45</a>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -127,6 +124,25 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
@@ -145,7 +161,13 @@
 const router = express.Router();
 const paymentController = require("../controllers/paymentController");
 &nbsp;
-// POST /api/payments - Create a new payment (called by Order Service)
+// ── Inter-service: auto-create payment from Order + User services ─────────
+// POST /api/payments/order/:orderId/user/:userId
+//   Fetches order amount from Order Service, validates user from User Identity
+//   Service, then creates a Stripe PaymentIntent automatically
+router.post("/order/:orderId/user/:userId", paymentController.createPaymentFromOrder);
+&nbsp;
+// POST /api/payments - Create a new payment (manual — caller supplies amount)
 router.post("/", paymentController.createPayment);
 &nbsp;
 // GET /api/payments - Get all payments (with optional filters)
@@ -155,7 +177,6 @@ router.get("/", paymentController.getAllPayments);
 &nbsp;
 // GET /api/payments/user/:userId/profile
 //   Proxies GET https://user-identity-service.onrender.com/api/users/:id
-//   Returns the user's full profile from the User Identity Service
 router.get("/user/:userId/profile", paymentController.getUserProfile);
 &nbsp;
 // GET /api/payments/user/:userId
@@ -173,6 +194,9 @@ router.post("/:id/confirm", paymentController.confirmPayment);
 // POST /api/payments/:id/refund - Process a refund
 router.post("/:id/refund", paymentController.refundPayment);
 &nbsp;
+// GET /api/payments/:id/details - Get payment enriched with order + user details
+router.get("/:id/details", paymentController.getPaymentWithDetails);
+&nbsp;
 // GET /api/payments/:id/invoice - Generate invoice
 router.get("/:id/invoice", paymentController.generateInvoice);
 &nbsp;
@@ -187,7 +211,7 @@ module.exports = router;
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-03-07T09:34:11.883Z
+                at 2026-04-20T08:53:59.021Z
             </div>
         <script src="../../prettify.js"></script>
         <script>
