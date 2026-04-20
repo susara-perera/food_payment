@@ -5,6 +5,12 @@ info:
     Payment microservice for the Food Ordering System.
     Handles Stripe payment processing, refunds, and invoice generation.
 
+    **Render deployment links:**
+
+    - Base URL: https://food-payment.onrender.com
+    - Health check: https://food-payment.onrender.com/health
+    - API docs (Swagger): https://food-payment.onrender.com/api-docs
+
     **Inter-service communication:**
 
     | Service | Base URL | Usage |
