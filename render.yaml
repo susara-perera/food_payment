@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: payment-service
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8084"
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: USER_SERVICE_URL
+        value: https://user-identity-service.onrender.com
+      - key: ORDER_SERVICE_URL
+        value: https://order-service-production-5615.up.railway.app
