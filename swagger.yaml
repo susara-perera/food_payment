@@ -15,7 +15,7 @@ info:
 
     | Service | Base URL | Usage |
     |---------|----------|-------|
-    | Order Service | https://order-service-production-5615.up.railway.app | Fetch order total & validate order status |
+    | Order Service | https://order-service-hokk.onrender.com | Fetch order total & validate order status |
     | User Identity Service | https://user-identity-service.onrender.com | Validate user & snapshot profile |
 
     Key endpoints consumed:
@@ -71,7 +71,7 @@ paths:
 
         Pass the `orderId` and `userId` in the URL — the Payment Service will:
 
-        1. `GET https://order-service-production-5615.up.railway.app/orders/{orderId}`
+        1. `GET https://order-service-hokk.onrender.com/orders/{orderId}`
            → fetch order total amount and validate the order is payable
 
         2. `GET https://user-identity-service.onrender.com/api/users/{userId}`
@@ -88,7 +88,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Order ID — from Order Service (`https://order-service-production-5615.up.railway.app`)
+          description: Order ID — from Order Service (`https://order-service-hokk.onrender.com`)
           example: "order_abc123"
         - in: path
           name: userId
@@ -415,7 +415,7 @@ paths:
       summary: Get payment enriched with live order & user details
       description: >
         Returns the payment record enriched with live data fetched from:
-        - `GET https://order-service-production-5615.up.railway.app/orders/{orderId}`
+        - `GET https://order-service-hokk.onrender.com/orders/{orderId}`
         - `GET https://user-identity-service.onrender.com/api/users/{userId}`
 
         Falls back to the cached snapshot stored at payment creation time
@@ -672,7 +672,7 @@ components:
 
     OrderDetails:
       type: object
-      description: Order object returned by the Order Service (https://order-service-production-5615.up.railway.app)
+      description: Order object returned by the Order Service (https://order-service-hokk.onrender.com)
       properties:
         _id:
           type: string
