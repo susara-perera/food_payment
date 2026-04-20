@@ -1,0 +1,39 @@
+{
+  "name": "payment-service",
+  "version": "1.0.0",
+  "description": "Payment microservice for the Food Ordering System - handles Stripe payment processing and invoice generation",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "jest --coverage --forceExit --detectOpenHandles",
+    "test:watch": "jest --watch",
+    "lint": "eslint src/ tests/"
+  },
+  "keywords": [
+    "payment",
+    "stripe",
+    "microservice",
+    "food-ordering"
+  ],
+  "author": "Student 4 - Susara",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.13.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "mongoose": "^8.9.5",
+    "morgan": "^1.10.0",
+    "stripe": "^17.5.0",
+    "swagger-ui-express": "^5.0.1",
+    "uuid": "^11.0.5",
+    "yamljs": "^0.3.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.9",
+    "supertest": "^7.0.0"
+  }
+}

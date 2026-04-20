@@ -1,0 +1,806 @@
+openapi: 3.0.3
+info:
+  title: Payment Service API
+  description: >
+    Payment microservice for the Food Ordering System.
+    Handles Stripe payment processing, refunds, and invoice generation.
+
+    **Inter-service communication:**
+
+    | Service | Base URL | Usage |
+    |---------|----------|-------|
+    | Order Service | https://order-service-production-5615.up.railway.app | Fetch order total & validate order status |
+    | User Identity Service | https://user-identity-service.onrender.com | Validate user & snapshot profile |
+
+    Key endpoints consumed:
+    - `GET /orders/{id}` — fetch order details (amount, status, items)
+    - `GET /api/users/{id}` — fetch user profile by ID
+
+    **Recommended integration flow (Order Service):**
+    After creating an order, call `POST /api/payments/order/{orderId}/user/{userId}` —
+    the Payment Service automatically fetches the order amount and validates the user,
+    so the Order Service does not need to pass an amount.
+  version: 1.1.0
+  contact:
+    name: Student 4 - Susara
+
+servers:
+  - url: https://food-order-payment-service-production.up.railway.app
+    description: Production (Railway)
+  - url: http://localhost:8084
+    description: Local development server
+
+externalDocs:
+  description: Order Service API
+  url: https://order-service-production-5615.up.railway.app
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      tags: [Health]
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: UP
+                  service:
+                    type: string
+                    example: payment-service
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /api/payments/order/{orderId}/user/{userId}:
+    post:
+      summary: "[PRIMARY] Auto-create payment from Order + User IDs"
+      description: >
+        **Recommended endpoint for the Order Service.**
+
+        Pass the `orderId` and `userId` in the URL — the Payment Service will:
+
+        1. `GET https://order-service-production-5615.up.railway.app/orders/{orderId}`
+           → fetch order total amount and validate the order is payable
+
+        2. `GET https://user-identity-service.onrender.com/api/users/{userId}`
+           → validate the user exists and capture their profile snapshot
+
+        3. Create a Stripe PaymentIntent with the fetched amount
+
+        4. Persist and return the payment record with a `clientSecret` for
+           frontend Stripe.js confirmation
+      tags: [Order Integration]
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema:
+            type: string
+          description: Order ID — from Order Service (`https://order-service-production-5615.up.railway.app`)
+          example: "order_abc123"
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+          description: User ID — from User Identity Service (`https://user-identity-service.onrender.com`)
+          example: "user_xyz789"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currency:
+                  type: string
+                  enum: [usd, eur, gbp, lkr]
+                  default: usd
+                  description: Override currency (default taken from order or 'usd')
+                paymentMethod:
+                  type: string
+                  enum: [card, bank_transfer]
+                  default: card
+                metadata:
+                  type: object
+                  description: Additional metadata to attach
+      responses:
+        "201":
+          description: Payment created — includes clientSecret for Stripe.js
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatePaymentFromOrderResponse"
+        "404":
+          description: Order or user not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Order already paid or cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Order has no payable amount
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Order Service or User Identity Service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/payments:
+    post:
+      summary: Create a payment (manual — caller supplies amount)
+      description: >
+        Manual payment creation — caller must supply `orderId`, `userId`, and `amount`
+        explicitly. Use `POST /api/payments/order/{orderId}/user/{userId}` instead
+        when integrating with the Order Service; that endpoint fetches the amount
+        automatically.
+      tags: [Payments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePaymentRequest"
+      responses:
+        "201":
+          description: Payment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatePaymentResponse"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    get:
+      summary: Get all payments
+      description: Retrieve a paginated list of payments with optional filters
+      tags: [Payments]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, processing, succeeded, failed, refunded]
+          description: Filter by payment status
+        - in: query
+          name: userId
+          schema:
+            type: string
+          description: Filter by user ID
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+          description: Items per page
+      responses:
+        "200":
+          description: List of payments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentListResponse"
+
+  /api/payments/{id}:
+    get:
+      summary: Get payment by ID
+      tags: [Payments]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Payment ID
+      responses:
+        "200":
+          description: Payment details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "404":
+          description: Payment not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/payments/order/{orderId}:
+    get:
+      summary: Get payment by Order ID
+      description: Retrieve payment information associated with a specific order
+      tags: [Payments]
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema:
+            type: string
+          description: Order ID from the Order Service
+      responses:
+        "200":
+          description: Payment details for the order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "404":
+          description: Payment not found for this order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/payments/{id}/confirm:
+    post:
+      summary: Confirm a payment
+      description: >
+        Confirm a payment using a Stripe payment method ID.
+        Use 'pm_card_visa' for testing successful payments.
+      tags: [Payments]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Payment ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - paymentMethodId
+              properties:
+                paymentMethodId:
+                  type: string
+                  example: pm_card_visa
+                  description: Stripe payment method ID (use pm_card_visa for testing)
+      responses:
+        "200":
+          description: Payment confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfirmPaymentResponse"
+        "400":
+          description: Payment already completed or invalid request
+        "404":
+          description: Payment not found
+
+  /api/payments/{id}/refund:
+    post:
+      summary: Refund a payment
+      description: Process a full or partial refund for a succeeded payment
+      tags: [Payments]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Payment ID
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: number
+                  description: Partial refund amount (omit for full refund)
+                  example: 5.99
+      responses:
+        "200":
+          description: Refund processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefundResponse"
+        "400":
+          description: Payment not eligible for refund
+        "404":
+          description: Payment not found
+
+  /api/payments/user/{userId}/profile:
+    get:
+      summary: Get user profile from User Identity Service
+      description: >
+        Fetches the user's full profile by calling the external User Identity Service.
+        Endpoint: GET https://user-identity-service.onrender.com/api/users/{id}
+      tags: [User Integration]
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+          description: User ID to look up in the User Identity Service
+      responses:
+        "200":
+          description: User profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfileResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: User Identity Service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/payments/user/{userId}:
+    get:
+      summary: Get all payments for a user (enriched with profile)
+      description: >
+        Returns a paginated list of payments belonging to the specified user.
+        The response also includes the user's profile fetched live from the
+        User Identity Service (https://user-identity-service.onrender.com/api/users/{id}).
+      tags: [User Integration]
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+          description: User ID
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Payments with user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPaymentsResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/payments/{id}/details:
+    get:
+      summary: Get payment enriched with live order & user details
+      description: >
+        Returns the payment record enriched with live data fetched from:
+        - `GET https://order-service-production-5615.up.railway.app/orders/{orderId}`
+        - `GET https://user-identity-service.onrender.com/api/users/{userId}`
+
+        Falls back to the cached snapshot stored at payment creation time
+        if either upstream service is unavailable.
+      tags: [Order Integration]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Payment ID
+      responses:
+        "200":
+          description: Payment with order and user details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentWithDetailsResponse"
+        "404":
+          description: Payment not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/payments/{id}/invoice:
+    get:
+      summary: Generate invoice for a payment
+      description: Returns an invoice object with payment details
+      tags: [Payments]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Payment ID
+      responses:
+        "200":
+          description: Invoice generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceResponse"
+        "404":
+          description: Payment not found
+
+components:
+  schemas:
+    CreatePaymentRequest:
+      type: object
+      required:
+        - orderId
+        - userId
+        - amount
+      properties:
+        orderId:
+          type: string
+          example: "order_abc123"
+          description: Order ID from the Order Service
+        userId:
+          type: string
+          example: "user_xyz789"
+          description: User ID from the User Identity Service
+        amount:
+          type: number
+          format: float
+          example: 25.99
+          description: Total payment amount
+        currency:
+          type: string
+          enum: [usd, eur, gbp, lkr]
+          default: usd
+          description: Payment currency
+        paymentMethod:
+          type: string
+          enum: [card, bank_transfer]
+          default: card
+        description:
+          type: string
+          example: "Payment for Order #123"
+        metadata:
+          type: object
+          description: Additional metadata
+
+    CreatePaymentResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Payment created successfully"
+        data:
+          type: object
+          properties:
+            paymentId:
+              type: string
+            stripePaymentIntentId:
+              type: string
+            clientSecret:
+              type: string
+            status:
+              type: string
+            amount:
+              type: number
+            currency:
+              type: string
+
+    PaymentResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/Payment"
+
+    PaymentListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Payment"
+        pagination:
+          type: object
+          properties:
+            total:
+              type: integer
+            page:
+              type: integer
+            limit:
+              type: integer
+            pages:
+              type: integer
+
+    ConfirmPaymentResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            paymentId:
+              type: string
+            orderId:
+              type: string
+            status:
+              type: string
+            amount:
+              type: number
+            currency:
+              type: string
+            stripeStatus:
+              type: string
+
+    RefundResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            paymentId:
+              type: string
+            orderId:
+              type: string
+            refundId:
+              type: string
+            refundAmount:
+              type: number
+            status:
+              type: string
+
+    InvoiceResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            invoiceNumber:
+              type: string
+              example: "INV-ABC12345"
+            paymentId:
+              type: string
+            orderId:
+              type: string
+            userId:
+              type: string
+            amount:
+              type: number
+            currency:
+              type: string
+            status:
+              type: string
+            paymentMethod:
+              type: string
+            description:
+              type: string
+            issuedAt:
+              type: string
+              format: date-time
+            paidAt:
+              type: string
+              format: date-time
+              nullable: true
+            refundAmount:
+              type: number
+
+    Payment:
+      type: object
+      properties:
+        _id:
+          type: string
+        orderId:
+          type: string
+        userId:
+          type: string
+        amount:
+          type: number
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, succeeded, failed, refunded]
+        paymentMethod:
+          type: string
+        stripePaymentIntentId:
+          type: string
+        description:
+          type: string
+        refundId:
+          type: string
+        refundAmount:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    OrderDetails:
+      type: object
+      description: Order object returned by the Order Service (https://order-service-production-5615.up.railway.app)
+      properties:
+        _id:
+          type: string
+          example: "order_abc123"
+        userId:
+          type: string
+          example: "user_xyz789"
+        status:
+          type: string
+          example: "pending"
+        totalAmount:
+          type: number
+          example: 25.99
+          description: Total order amount (also checked as totalPrice / total / amount)
+        items:
+          type: array
+          items:
+            type: object
+        createdAt:
+          type: string
+          format: date-time
+
+    CreatePaymentFromOrderResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Payment created successfully from order"
+        data:
+          type: object
+          properties:
+            paymentId:
+              type: string
+              description: MongoDB payment document ID
+            orderId:
+              type: string
+            userId:
+              type: string
+            amount:
+              type: number
+              description: Amount fetched from the Order Service
+            currency:
+              type: string
+            stripePaymentIntentId:
+              type: string
+            clientSecret:
+              type: string
+              description: Stripe PaymentIntent client secret — pass to Stripe.js
+            status:
+              type: string
+              example: "processing"
+            order:
+              $ref: "#/components/schemas/OrderDetails"
+            user:
+              $ref: "#/components/schemas/UserProfile"
+
+    PaymentWithDetailsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            payment:
+              $ref: "#/components/schemas/Payment"
+            order:
+              $ref: "#/components/schemas/OrderDetails"
+            user:
+              $ref: "#/components/schemas/UserProfile"
+
+    UserProfile:
+      type: object
+      description: User object returned by the User Identity Service
+      properties:
+        _id:
+          type: string
+          example: "67abc123"
+        name:
+          type: string
+          example: "Susara Perera"
+        email:
+          type: string
+          example: "susara@example.com"
+        role:
+          type: string
+          example: "customer"
+
+    UserProfileResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/UserProfile"
+
+    UserPaymentsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            user:
+              $ref: "#/components/schemas/UserProfile"
+            payments:
+              type: array
+              items:
+                $ref: "#/components/schemas/Payment"
+        pagination:
+          type: object
+          properties:
+            total:
+              type: integer
+            page:
+              type: integer
+            limit:
+              type: integer
+            pages:
+              type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "Error message"
